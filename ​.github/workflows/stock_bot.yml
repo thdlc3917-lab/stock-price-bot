@@ -2,15 +2,14 @@ name: Stock Price Monitor
 
 on:
   schedule:
-    # 毎日 平日の日本時間 9:00〜15:00 の間、15分おきに実行する例
-    # UTC（世界標準時）で記述するため、日本時間から9時間を引きます
+    # 平日の日本時間 9:00〜15:05 の間、15分おきに実行
+    # UTC 0:00〜6:05 (JST 9:00〜15:05)
     - cron: '*/15 0-6 * * 1-5'
-  workflow_dispatch: # 手動で実行ボタンを押せるようにする設定
+  workflow_dispatch: # 手動実行ボタン用
 
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -27,6 +26,5 @@ jobs:
 
       - name: Run script
         env:
-          # APIキーや通知トークンがある場合はここに設定（後述）
-          LINE_NOTIFY_TOKEN: ${{ secrets.LINE_NOTIFY_TOKEN }}
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
         run: python main.py
