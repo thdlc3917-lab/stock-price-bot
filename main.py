@@ -1,66 +1,51 @@
-!pip install yfinance requests
 import yfinance as yf
 import requests
-import time
+import os
 from datetime import datetime
 
-# --- 設定エリア ---
-WEBHOOK_URL = "https://discord.com/api/webhooks/1471103745952579796/223rJQws4-4YEqusaSaP2OU5-EsLR9GrPIuoJ6zIjrDqBFXShHnVgVXhnMKS3stdaZJH"
-STOCK_CODE = "6330.T"  # 東洋エンジニアリング
-CHECK_INTERVAL = 300   # 5分ごとにチェック
-
-# その日の記録用
-todays_high = 0
-todays_low = float('inf')
-current_day = ""
+# --- 設定エリア (GitHub Secretsから読み込む) ---
+WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_URL")
+STOCK_CODE = "6330.T"
 
 def send_discord(message):
+    if not WEBHOOK_URL:
+        print("Webhook URLが設定されていません")
+        return
     payload = {"content": message}
     try:
         requests.post(WEBHOOK_URL, json=payload)
     except Exception as e:
         print(f"Discord送信エラー: {e}")
 
-print("🚀 監視ボットを起動しました。このタブを開いたままにしてください。")
-
-while True:
+def main():
     try:
-        # 日本時間の現在時刻を取得
         now = datetime.now()
-        today_str = now.strftime("%Y-%m-%d")
-
-        # 日付が変わったらリセット
-        if current_day != today_str:
-            current_day = today_str
-            todays_high = 0
-            todays_low = float('inf')
-            print(f"--- {today_str} の監視を開始しました ---")
-
-        # 株価データ取得
         stock = yf.Ticker(STOCK_CODE)
+        # 当日の1分足データをすべて取得
         data = stock.history(period="1d", interval="1m")
 
-        if not data.empty:
-            latest_price = data['Close'].iloc[-1]
-            market_high = data['High'].max()
-            market_low = data['Low'].min()
+        if data.empty:
+            print("データが取得できませんでした（市場閉場中など）")
+            return
 
-            # 高値更新チェック
-            if market_high > todays_high:
-                todays_high = market_high
-                msg = f"📈 【高値更新】東洋エンジニア(6330)\n現在の高値: {todays_high}円\n(現在値: {latest_price}円)"
-                send_discord(msg)
-                print(f"[{now.strftime('%H:%M')}] {msg}")
+        latest_price = round(data['Close'].iloc[-1], 1)
+        market_high = round(data['High'].max(), 1)
+        market_low = round(data['Low'].min(), 1)
 
-            # 安値更新チェック
-            if market_low < todays_low:
-                todays_low = market_low
-                msg = f"📉 【安値更新】東洋エンジニア(6330)\n現在の安値: {todays_low}円\n(現在値: {latest_price}円)"
-                send_discord(msg)
-                print(f"[{now.strftime('%H:%M')}] {msg}")
+        # 直近の価格が「今日の高値」または「今日の安値」に等しいかチェック
+        # GitHub Actionsで数分おきに起動するため、その瞬間に更新されていれば通知
+        if latest_price >= market_high:
+            msg = f"📈 【高値圏】東洋エンジニア(6330)\n本日高値: {market_high}円\n(現在値: {latest_price}円)"
+            send_discord(msg)
+        
+        elif latest_price <= market_low:
+            msg = f"📉 【安値圏】東洋エンジニア(6330)\n本日安値: {market_low}円\n(現在値: {latest_price}円)"
+            send_discord(msg)
+
+        print(f"[{now.strftime('%H:%M')}] Check completed. Price: {latest_price}")
 
     except Exception as e:
         print(f"エラー発生: {e}")
 
-    # 指定した秒数待機
-    time.sleep(CHECK_INTERVAL)
+if __name__ == "__main__":
+    main()
